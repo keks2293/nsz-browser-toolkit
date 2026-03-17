@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nsz · гибридный режим (папка mountNativeFS / файлы MEMFS)</title>
+    <!-- Font Awesome 6 (free) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* ... стили без изменений ... */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        body {
+            background: linear-gradient(145deg, #f8fafc 0%, #eef2f6 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 2rem 1rem;
+        }
+        .app-container {
+            max-width: 1300px;
+            width: 100%;
+        }
+        .app-header {
+            background: white;
+            border-radius: 32px;
+            padding: 2rem 2.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 20px 35px -8px rgba(0,20,30,0.15);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+        }
+        .logo-area h1 {
+            font-size: 2.2rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+        .btn-primary {
+            background: linear-gradient(145deg, #1e3c72, #2b4a8f);
+            border: none;
+            color: white;
+            font-weight: 600;
+            padding: 0.9rem 2rem;
+            border-radius: 60px;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            box-shadow: 0 8px 18px rgba(28,60,100,0.3);
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-primary:hover:not(:disabled) {
+            transform: scale(1.02);
+            box-shadow: 0 12px 24px rgba(28,60,100,0.4);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .status-badge {
+            background: #e9ecf3;
+            padding: 0.6rem 1.5rem;
+            border-radius: 40px;
+            font-weight: 500;
+            color: #2d3a5e;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .note-box {
+            background: #e6edf9;
+            border-radius: 20px;
+            padding: 0.8rem 1.5rem;
+            color: #1d3a6d;
+            border-left: 5px solid #2a5a9c;
+            margin-top: 1rem;
+        }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2.5rem;
+        }
+        .card {
+            background: rgba(255,255,255,0.75);
+            backdrop-filter: blur(8px);
+            border-radius: 32px;
+            padding: 1.8rem;
+            box-shadow: 0 15px 30px -12px rgba(0,20,40,0.2);
+            border: 1px solid rgba(255,255,255,0.7);
+            transition: transform 0.15s;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 1.5rem;
+            font-weight: 600;
+            font-size: 1.4rem;
+            color: #13294b;
+        }
+        .card-header i {
+            font-size: 1.8rem;
+            color: #2a5a9c;
+            background: white;
+            padding: 0.5rem;
+            border-radius: 18px;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.03);
+        }
+        .dir-status {
+            background: #f0f4fe;
+            padding: 0.7rem 1.2rem;
+            border-radius: 60px;
+            font-size: 0.9rem;
+            color: #1d3e7c;
+            margin-bottom: 1.5rem;
+            display: inline-block;
+            border: 1px solid #cdddfc;
+        }
+        .file-list {
+            background: white;
+            border-radius: 24px;
+            padding: 1rem;
+            max-height: 200px;
+            overflow-y: auto;
+            margin: 1.2rem 0;
+            border: 1px solid #dde3ed;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .file-list ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .file-list li {
+            padding: 0.6rem 1rem;
+            border-radius: 16px;
+            margin: 0.25rem 0;
+            background: #f9fcff;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .file-list li:hover {
+            background: #e3edfe;
+            border-color: #a5c0fa;
+        }
+        .file-list li.selected {
+            background: #1e3c72;
+            color: white;
+            border-color: #0a1a33;
+        }
+        .file-list li.selected i {
+            color: white;
+        }
+        .file-list i {
+            color: #3b6cb7;
+            width: 1.8rem;
+            text-align: center;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-weight: 500;
+            color: #1e3c72;
+            margin-top: 0.5rem;
+            cursor: pointer;
+        }
+        .checkbox-label input {
+            width: 1.3rem;
+            height: 1.3rem;
+            accent-color: #1e3c72;
+        }
+        .action-section {
+            background: white;
+            border-radius: 40px;
+            padding: 2rem 2.5rem;
+            box-shadow: 0 25px 40px -15px rgba(0,30,60,0.25);
+            border: 1px solid rgba(255,255,255,0.6);
+        }
+        .compress-options {
+            background: #f8fafd;
+            border-radius: 40px;
+            padding: 1.2rem 2rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+        .compress-options label {
+            font-weight: 500;
+            color: #1d3a6d;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .compress-options input {
+            width: 80px;
+            padding: 0.5rem;
+            border-radius: 30px;
+            border: 1px solid #b9cef0;
+            text-align: center;
+            font-weight: 600;
+            background: white;
+        }
+        .flags-section {
+            background: #f8fafd;
+            border-radius: 40px;
+            padding: 1.2rem 2rem;
+            margin-bottom: 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            align-items: center;
+        }
+        .flag-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: #1d3a6d;
+        }
+        .flag-checkbox input {
+            width: 1.2rem;
+            height: 1.2rem;
+            accent-color: #1e3c72;
+        }
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        .btn-action {
+            background: white;
+            border: 1px solid #cddcf2;
+            color: #1a3152;
+            font-weight: 600;
+            padding: 1rem 2rem;
+            border-radius: 60px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.7rem;
+            transition: 0.15s;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.02);
+            flex: 1 1 auto;
+            justify-content: center;
+        }
+        .btn-action:hover:not(:disabled) {
+            background: #e5efff;
+            border-color: #7fa3d1;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 18px -6px #abc0dd;
+        }
+        .btn-action:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            background: #f1f4f9;
+        }
+        .btn-action i {
+            font-size: 1.2rem;
+            color: #2a5a9c;
+        }
+        .output-area {
+            margin-top: 2rem;
+        }
+        .output-area textarea {
+            width: 100%;
+            height: 280px;
+            border-radius: 30px;
+            border: 1px solid #d4e0f0;
+            padding: 1.8rem;
+            font-family: monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            background: #ffffffd9;
+            resize: vertical;
+            box-shadow: inset 0 4px 8px #e9eef6;
+        }
+        hr {
+            border: none;
+            border-top: 2px solid #cddcf0;
+            margin: 1.5rem 0;
+        }
+        @media (max-width: 700px) {
+            .app-header { flex-direction: column; align-items: start; }
+            .button-group { flex-direction: column; }
+            .compress-options { flex-direction: column; align-items: start; }
+            .flags-section { flex-direction: column; align-items: start; }
+        }
+        .mode-switch {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background: #eef3fb;
+            border-radius: 60px;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 0.7rem 1rem;
+            border: none;
+            border-radius: 40px;
+            background: transparent;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            color: #1e3c72;
+        }
+        .mode-btn.active {
+            background: #1e3c72;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 20px;
+            padding: 0.5rem 1rem;
+            margin-bottom: 1rem;
+            color: #856404;
+            font-size: 0.9rem;
+        }
+        .warning-box i {
+            margin-right: 0.5rem;
+        }
+        .file-limit-warning {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            border-radius: 20px;
+            padding: 0.5rem 1rem;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+        .file-limit-warning i {
+            margin-right: 0.5rem;
+        }
+        .progress-container {
+            margin: 1rem 0;
+            padding: 0.5rem;
+            background: #f0f4fe;
+            border-radius: 30px;
+            display: none;
+        }
+        .progress-bar {
+            height: 20px;
+            background: #1e3c72;
+            border-radius: 30px;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .progress-text {
+            margin-top: 0.3rem;
+            font-size: 0.9rem;
+            color: #1d3a6d;
+            text-align: center;
+        }
+        .file-input-hidden {
+            display: none;
+        }
+        .btn-file {
+            background: white;
+            border: 1px solid #cddcf2;
+            color: #1a3152;
+            font-weight: 600;
+            padding: 1rem 2rem;
+            border-radius: 60px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.7rem;
+            transition: 0.15s;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.02);
+            width: 100%;
+            justify-content: center;
+        }
+        .btn-file:hover {
+            background: #e5efff;
+            border-color: #7fa3d1;
+        }
+        .select-all-btn {
+            background: #e0ebff;
+            border: 1px solid #a5c0fa;
+            border-radius: 30px;
+            padding: 0.5rem 1rem;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .select-all-btn:hover {
+            background: #c9dbf5;
+        }
+        .folder-selector {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            background: #f0f4fe;
+            border-radius: 30px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .folder-selector select {
+            flex: 1;
+            padding: 0.5rem 1rem;
+            border-radius: 30px;
+            border: 1px solid #b9cef0;
+            background: white;
+            font-weight: 500;
+            color: #1d3a6d;
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="app-header">
+        <div class="logo-area">
+            <h1><i class="fas fa-cube" style="margin-right: 0.5rem; color:#2a5a9c;"></i>nsz · browser toolkit</h1>
+            <p><i class="fas fa-microchip"></i> Nintendo Switch compression • powered by Pyodide 0.29.3</p>
+        </div>
+        <div class="load-area">
+            <span class="status-badge" id="status"><i class="fas fa-circle-notch"></i> Not loaded</span>
+            <button class="btn-primary" id="loadBtn"><i class="fas fa-download"></i> Load nsz</button>
+        </div>
+    </div>
+    <div class="note-box">
+        <i class="fas fa-info-circle fa-xl"></i>
+        <span>Initial download: Pyodide (~10 MB) + nsz & dependencies (~5‑10 MB). Please be patient.</span>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="card" id="keysControls" style="display: none;">
+            <div class="card-header"><i class="fas fa-key"></i> Keys Management</div>
+            <p style="margin-bottom: 1.2rem; color:#2f405c;">Keys are downloaded automatically. You can manually update:</p>
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                <button class="btn-action" id="fetchKeysBtn" style="background:#e0ebff;"><i class="fas fa-cloud-download-alt"></i> Fetch prod.keys</button>
+                <button class="btn-action" id="uploadKeysBtn"><i class="fas fa-upload"></i> Upload keys.txt</button>
+                <input type="file" id="keysFileInput" accept=".keys,.txt" style="display:none;">
+            </div>
+            <span class="dir-status" id="keysStatus" style="margin-top: 1rem; display: inline-block;"></span>
+        </div>
+
+        <!-- Карточка ввода с переключателем режимов -->
+        <div class="card" id="inputSection" style="display: none;">
+            <div class="card-header"><i class="fas fa-file-import"></i> Input Selection</div>
+            
+            <!-- Переключатель режимов -->
+            <div class="mode-switch">
+                <button class="mode-btn active" id="modeFolderBtn">📁 Режим папки (mountNativeFS)</button>
+                <button class="mode-btn" id="modeFilesBtn">📄 Режим файлов (копирование в память, до 2 ГБ)</button>
+            </div>
+            
+            <!-- Область для режима папки -->
+            <div id="folderModeArea">
+                <div class="warning-box" id="browserWarning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>На Android и Firefox режим папки может не работать. Используйте режим файлов.</span>
+                </div>
+                <p>Выберите папку с файлами .nsp/.nsz (будет смонтирована через mountNativeFS)</p>
+                <button class="btn-action" id="selectFolderBtn" style="margin-bottom: 1rem; width: 100%;"><i class="fas fa-folder-open"></i> Выбрать папку</button>
+                
+                <!-- Селектор для переключения между ранее выбранными папками -->
+                <div class="folder-selector" id="folderSelector" style="display: none;">
+                    <i class="fas fa-folders"></i>
+                    <select id="folderSelect">
+                        <option value="">-- Переключиться на другую папку --</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Область для режима файлов -->
+            <div id="filesModeArea" style="display: none;">
+                <p>Выберите один или несколько файлов .nsp/.nsz (будут скопированы в оперативную память)</p>
+                <input type="file" id="filePicker" multiple accept=".nsp,.nsz" class="file-input-hidden">
+                <button class="btn-file" id="filePickerBtn"><i class="fas fa-file-import"></i> Выбрать файлы</button>
+            </div>
+
+            <!-- Кнопка "Выбрать все / Снять все" -->
+            <button class="select-all-btn" id="selectAllBtn"><i class="fas fa-check-double"></i> Выбрать все файлы</button>
+
+            <!-- Предупреждение о лимите файлов -->
+            <div class="file-limit-warning" id="fileLimitWarning" style="display: none;">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>Файлы размером более 2 ГБ не могут быть загружены в память. Они будут пропущены. Используйте режим папки для работы с такими файлами.</span>
+            </div>
+
+            <!-- Общий список выбранных файлов -->
+            <div id="selectedFileList" class="file-list">Файлы не выбраны.</div>
+
+            <!-- Прогресс загрузки в память -->
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar" id="progressBar"></div>
+                <div class="progress-text" id="progressText"></div>
+            </div>
+        </div>
+
+        <!-- Карточка для выходной папки -->
+        <div class="card" id="outputDirSection" style="display: none;">
+            <div class="card-header"><i class="fas fa-folder-download"></i> Output Directory</div>
+            <button class="btn-action" id="selectOutputDirBtn" style="margin-bottom: 1rem; width: 100%;"><i class="fas fa-folder-plus"></i> Select Output Folder</button>
+            <div class="dir-status" id="outputDirStatus">No folder selected</div>
+            <div class="file-list" id="outputFileList" style="margin-top: 1rem; max-height: 150px;">No folder mounted.</div>
+            <div class="warning-box">
+                <i class="fas fa-info-circle"></i>
+                <span>Если папка не выбрана, результат будет сохранён в подпапку <strong>input/output</strong>.</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="action-section">
+        <div class="compress-options">
+            <label><i class="fas fa-sliders-h"></i> Compression level (1‑22)</label>
+            <input type="number" id="compressLevel" min="1" max="22" value="18">
+            <label><i class="fas fa-microchip"></i> Threads (1‑8)</label>
+            <input type="number" id="threads" min="1" max="8" value="2">
+        </div>
+
+        <div class="flags-section">
+            <span style="font-weight: 600; color: #1e3c72;"><i class="fas fa-flag"></i> Options:</span>
+            <label class="flag-checkbox"><input type="checkbox" id="flagLong"> --long</label>
+            <label class="flag-checkbox"><input type="checkbox" id="flagBlock"> --block</label>
+            <label class="flag-checkbox"><input type="checkbox" id="flagSolid" checked> --solid</label>
+            <label class="flag-checkbox"><input type="checkbox" id="flagFixPadding"> --fix-padding</label>
+            <label class="flag-checkbox"><input type="checkbox" id="flagKeep"> --keep</label>
+            <label class="flag-checkbox"><input type="checkbox" id="flagQuickVerify"> --quick-verify</label>
+            <label class="flag-checkbox"><input type="checkbox" id="flagOverwrite"> --overwrite</label>
+            <label class="flag-checkbox"><input type="checkbox" id="flagRmSource"> --rm-source</label>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-action" id="analyzeBtn" disabled><i class="fas fa-magnifying-glass"></i> Analyze</button>
+            <button class="btn-action" id="verifyBtn" disabled><i class="fas fa-badge-check"></i> Verify</button>
+            <button class="btn-action" id="decompressBtn" disabled><i class="fas fa-file-zipper"></i> Decompress NSZ → NSP</button>
+            <button class="btn-action" id="compressBtn" disabled><i class="fas fa-compress"></i> Compress NSP → NSZ</button>
+        </div>
+
+        <hr>
+        <div class="output-area">
+            <textarea id="output" readonly placeholder="Results will appear here..."></textarea>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.js"></script>
+<script>
+    (function() {
+        // --- Основные переменные ---
+        let pyodide = null;
+        let nszReady = false;
+
+        // Для режима файлов
+        let selectedFiles = [];
+        let inputFilenames = [];
+        let selectedInputFile = null;
+        let allFilesSelected = false;
+
+        // Для режима папки: храним все когда-либо выбранные папки
+        const inputFolders = []; // каждый элемент: { handle, name, mountPoint, files, nativeFS }
+        let currentFolderIndex = -1; // индекс активной папки в массиве
+
+        let outputDirHandle = null;
+        let outputNativeFS = null;
+        const fsApiSupported = 'showDirectoryPicker' in window;
+
+        let currentMode = 'folder';
+
+        const loadedFiles = new Map(); // для режима files (кэш загруженных в память файлов)
+
+        // DOM элементы
+        const outputEl = document.getElementById('output');
+        const statusEl = document.getElementById('status');
+        const loadBtn = document.getElementById('loadBtn');
+        const keysControls = document.getElementById('keysControls');
+        const fetchKeysBtn = document.getElementById('fetchKeysBtn');
+        const uploadKeysBtn = document.getElementById('uploadKeysBtn');
+        const keysFileInput = document.getElementById('keysFileInput');
+        const keysStatus = document.getElementById('keysStatus');
+        const inputSection = document.getElementById('inputSection');
+        const modeFolderBtn = document.getElementById('modeFolderBtn');
+        const modeFilesBtn = document.getElementById('modeFilesBtn');
+        const folderModeArea = document.getElementById('folderModeArea');
+        const filesModeArea = document.getElementById('filesModeArea');
+        const selectFolderBtn = document.getElementById('selectFolderBtn');
+        const folderSelector = document.getElementById('folderSelector');
+        const folderSelect = document.getElementById('folderSelect');
+        const filePicker = document.getElementById('filePicker');
+        const filePickerBtn = document.getElementById('filePickerBtn');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const selectedFileList = document.getElementById('selectedFileList');
+        const outputDirSection = document.getElementById('outputDirSection');
+        const selectOutputDirBtn = document.getElementById('selectOutputDirBtn');
+        const outputDirStatus = document.getElementById('outputDirStatus');
+        const outputFileList = document.getElementById('outputFileList');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const verifyBtn = document.getElementById('verifyBtn');
+        const decompressBtn = document.getElementById('decompressBtn');
+        const compressBtn = document.getElementById('compressBtn');
+        const compressLevelInput = document.getElementById('compressLevel');
+        const threadsInput = document.getElementById('threads');
+        const fileLimitWarning = document.getElementById('fileLimitWarning');
+
+        const flagLong = document.getElementById('flagLong');
+        const flagBlock = document.getElementById('flagBlock');
+        const flagSolid = document.getElementById('flagSolid');
+        const flagFixPadding = document.getElementById('flagFixPadding');
+        const flagKeep = document.getElementById('flagKeep');
+        const flagQuickVerify = document.getElementById('flagQuickVerify');
+        const flagOverwrite = document.getElementById('flagOverwrite');
+        const flagRmSource = document.getElementById('flagRmSource');
+
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+
+        function printOutput(text) {
+            outputEl.value += text + '\n';
+        }
+
+        function stringifyError(e) {
+            if (e === null || e === undefined) return "null or undefined error object";
+            if (e instanceof Error) return `${e.message} (stack: ${e.stack})`;
+            if (typeof e === 'object') {
+                const parts = [];
+                if (e.message !== undefined) parts.push(`message: ${String(e.message)}`);
+                try { const s = String(e); if (s !== '[object Object]') parts.push(`toString: ${s}`); } catch {}
+                if (e.name !== undefined) parts.push(`name: ${e.name}`);
+                if (e.code !== undefined) parts.push(`code: ${e.code}`);
+                if (parts.length) return parts.join(', ');
+                try { return JSON.stringify(e); } catch { return '[object Object] (circular)'; }
+            }
+            return String(e);
+        }
+
+        function updateButtons() {
+            if (!nszReady) {
+                analyzeBtn.disabled = true;
+                verifyBtn.disabled = true;
+                decompressBtn.disabled = true;
+                compressBtn.disabled = true;
+                return;
+            }
+            if (allFilesSelected) {
+                const enabled = inputFilenames.length > 0;
+                analyzeBtn.disabled = !enabled;
+                verifyBtn.disabled = !enabled;
+                const hasNSZ = inputFilenames.some(name => name.toLowerCase().endsWith('.nsz'));
+                decompressBtn.disabled = !hasNSZ;
+                const hasNSP = inputFilenames.some(name => name.toLowerCase().endsWith('.nsp'));
+                compressBtn.disabled = !hasNSP;
+            } else {
+                const enabled = selectedInputFile !== null;
+                analyzeBtn.disabled = !enabled;
+                verifyBtn.disabled = !enabled;
+                decompressBtn.disabled = !(selectedInputFile && selectedInputFile.toLowerCase().endsWith('.nsz'));
+                compressBtn.disabled = !(selectedInputFile && selectedInputFile.toLowerCase().endsWith('.nsp'));
+            }
+        }
+
+        function validateInputs() {
+            let level = parseInt(compressLevelInput.value, 10);
+            if (isNaN(level) || level < 1 || level > 22) {
+                compressLevelInput.value = 18;
+            }
+            let threads = parseInt(threadsInput.value, 10);
+            if (isNaN(threads) || threads < 1 || threads > 8) {
+                threadsInput.value = 2;
+            }
+        }
+        compressLevelInput.addEventListener('blur', validateInputs);
+        compressLevelInput.addEventListener('change', validateInputs);
+        threadsInput.addEventListener('blur', validateInputs);
+        threadsInput.addEventListener('change', validateInputs);
+
+        function clearFileCache() {
+            for (const [name, path] of loadedFiles.entries()) {
+                try { pyodide.FS.unlink(path); } catch (e) {}
+            }
+            loadedFiles.clear();
+        }
+
+        // --- Обновление селектора папок ---
+        function updateFolderSelector() {
+            if (inputFolders.length === 0) {
+                folderSelector.style.display = 'none';
+                return;
+            }
+            folderSelector.style.display = 'flex';
+            folderSelect.innerHTML = '<option value="">-- Переключиться на другую папку --</option>';
+            inputFolders.forEach((folder, idx) => {
+                const option = document.createElement('option');
+                option.value = idx;
+                option.textContent = folder.name + (idx === currentFolderIndex ? ' (текущая)' : '');
+                if (idx === currentFolderIndex) option.selected = true;
+                folderSelect.appendChild(option);
+            });
+        }
+
+        // --- Переключение на другую сохранённую папку ---
+        async function switchToFolder(index) {
+            if (index === currentFolderIndex || index < 0 || index >= inputFolders.length) return;
+            const folder = inputFolders[index];
+            try {
+                const perm = await folder.handle.requestPermission({ mode: 'readwrite' });
+                if (perm !== 'granted') {
+                    printOutput(`❌ Потерян доступ к папке ${folder.name}. Попробуйте выбрать её заново.`);
+                    return;
+                }
+            } catch (e) {
+                printOutput(`❌ Ошибка доступа к папке ${folder.name}: ${e.message}`);
+                return;
+            }
+
+            currentFolderIndex = index;
+            inputFilenames = folder.files.map(f => f.name);
+            allFilesSelected = true;
+            selectedInputFile = null;
+            renderFileList();
+            updateButtons();
+            updateFolderSelector();
+            printOutput(`📁 Переключено на папку: ${folder.name}`);
+        }
+
+        folderSelect.addEventListener('change', (e) => {
+            const idx = parseInt(e.target.value, 10);
+            if (!isNaN(idx)) {
+                switchToFolder(idx);
+            }
+        });
+
+        // --- Выбор папки (режим folder) с рекурсивным обходом (без Python) ---
+        async function selectFolder() {
+            if (!nszReady) {
+                printOutput('❌ Сначала загрузите nsz (кнопка Load nsz)');
+                return;
+            }
+            if (!window.showDirectoryPicker) {
+                printOutput('❌ API выбора папки не поддерживается в этом браузере. Используйте режим выбора файлов.');
+                return;
+            }
+            try {
+                const dirHandle = await window.showDirectoryPicker();
+
+                // Проверим, есть ли уже такая папка в сохранённых
+                let existingIndex = -1;
+                for (let i = 0; i < inputFolders.length; i++) {
+                    const f = inputFolders[i];
+                    try {
+                        if (await dirHandle.isSameEntry(f.handle)) {
+                            existingIndex = i;
+                            break;
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+
+                if (existingIndex !== -1) {
+                    printOutput(`📁 Папка "${dirHandle.name}" уже была выбрана, переключаемся...`);
+                    await switchToFolder(existingIndex);
+                    return;
+                }
+
+                const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+                if (perm !== 'granted') throw new Error('Read/write permission not granted');
+
+                const timestamp = Date.now();
+                const newMountPoint = `/input_${timestamp}`;
+                pyodide.FS.mkdirTree(newMountPoint);
+                const newNativeFS = await pyodide.mountNativeFS(newMountPoint, dirHandle);
+
+                // --- Рекурсивный обход папки (как в старой версии) ---
+                const folderFiles = [];
+
+                async function walkDir(currentHandle, basePath = '') {
+                    for await (const entry of currentHandle.values()) {
+                        if (entry.kind === 'file') {
+                            const fileName = entry.name;
+                            const lowerName = fileName.toLowerCase();
+                            if (lowerName.endsWith('.nsp') || lowerName.endsWith('.nsz')) {
+                                const fullPath = basePath ? `${newMountPoint}/${basePath}/${fileName}` : `${newMountPoint}/${fileName}`;
+                                folderFiles.push({ name: fileName, path: fullPath });
+                            }
+                        } else if (entry.kind === 'directory') {
+                            const subPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+                            await walkDir(entry, subPath);
+                        }
+                    }
+                }
+
+                await walkDir(dirHandle);
+
+                if (folderFiles.length === 0) {
+                    printOutput('❌ В выбранной папке нет .nsp или .nsz файлов');
+                    return;
+                }
+
+                const folderInfo = {
+                    handle: dirHandle,
+                    name: dirHandle.name,
+                    mountPoint: newMountPoint,
+                    nativeFS: newNativeFS,
+                    files: folderFiles
+                };
+                inputFolders.push(folderInfo);
+                currentFolderIndex = inputFolders.length - 1;
+
+                inputFilenames = folderFiles.map(f => f.name);
+                allFilesSelected = true;
+                selectedInputFile = null;
+                renderFileList();
+                updateButtons();
+                updateFolderSelector();
+                printOutput(`✅ Выбрано ${folderFiles.length} файлов из папки "${dirHandle.name}", смонтировано в ${newMountPoint} (чтение+запись)`);
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    printOutput(`❌ Ошибка выбора папки: ${err.message}`);
+                }
+            }
+        }
+        selectFolderBtn.addEventListener('click', selectFolder);
+
+        filePickerBtn.addEventListener('click', () => filePicker.click());
+
+        // --- Выбор файлов с фильтрацией по размеру ---
+        filePicker.addEventListener('change', (e) => {
+            if (!nszReady) {
+                printOutput('❌ Сначала загрузите nsz (кнопка Load nsz)');
+                return;
+            }
+
+            const allFiles = Array.from(e.target.files || []);
+            const validFiles = [];
+            const oversizedFiles = [];
+
+            allFiles.forEach(f => {
+                const name = f.name.toLowerCase();
+                if (!name.endsWith('.nsp') && !name.endsWith('.nsz')) return;
+
+                if (f.size > 2 * 1024 * 1024 * 1024) {
+                    oversizedFiles.push(f);
+                } else {
+                    validFiles.push(f);
+                }
+            });
+
+            if (oversizedFiles.length > 0) {
+                fileLimitWarning.style.display = 'block';
+                oversizedFiles.forEach(f => {
+                    const sizeGB = (f.size / (1024*1024*1024)).toFixed(2);
+                    printOutput(`⛔ Файл ${f.name} (${sizeGB} GB) превышает лимит 2 ГБ и не может быть загружен в память. Пропущен.`);
+                });
+            } else {
+                fileLimitWarning.style.display = 'none';
+            }
+
+            selectedFiles = validFiles;
+            inputFilenames = selectedFiles.map(f => f.name);
+            clearFileCache();
+
+            if (selectedFiles.length > 0) {
+                allFilesSelected = true;
+                selectedInputFile = null;
+            } else {
+                allFilesSelected = false;
+                selectedInputFile = null;
+            }
+            renderFileList();
+            updateButtons();
+            printOutput(`📁 Выбрано ${selectedFiles.length} файлов (размером до 2 ГБ)`);
+        });
+
+        selectAllBtn.addEventListener('click', () => {
+            if (inputFilenames.length === 0) return;
+            if (allFilesSelected) {
+                allFilesSelected = false;
+                selectedInputFile = null;
+            } else {
+                allFilesSelected = true;
+                selectedInputFile = null;
+            }
+            renderFileList();
+            updateButtons();
+        });
+
+        function renderFileList() {
+            if (inputFilenames.length === 0) {
+                selectedFileList.innerHTML = 'Файлы не выбраны.';
+                return;
+            }
+            const ul = document.createElement('ul');
+            inputFilenames.forEach(f => {
+                const li = document.createElement('li');
+                li.innerHTML = `<i class="fas fa-file"></i> ${f}`;
+                li.onclick = (event) => {
+                    event.stopPropagation();
+                    allFilesSelected = false;
+                    selectSingleFile(f);
+                };
+                if (allFilesSelected || f === selectedInputFile) {
+                    li.classList.add('selected');
+                }
+                ul.appendChild(li);
+            });
+            selectedFileList.innerHTML = '';
+            selectedFileList.appendChild(ul);
+        }
+
+        function selectSingleFile(filename) {
+            selectedInputFile = filename;
+            allFilesSelected = false;
+            renderFileList();
+            updateButtons();
+            printOutput(`📁 Selected: ${filename}`);
+        }
+
+        function getFilesToProcess() {
+            if (allFilesSelected) {
+                if (inputFilenames.length === 0) throw new Error('No files selected');
+                if (currentMode === 'folder') {
+                    if (currentFolderIndex === -1) throw new Error('No folder selected');
+                    const folder = inputFolders[currentFolderIndex];
+                    return folder.files.filter(f => inputFilenames.includes(f.name));
+                } else {
+                    return selectedFiles;
+                }
+            } else if (selectedInputFile) {
+                if (currentMode === 'folder') {
+                    if (currentFolderIndex === -1) throw new Error('No folder selected');
+                    const folder = inputFolders[currentFolderIndex];
+                    const fileObj = folder.files.find(f => f.name === selectedInputFile);
+                    if (!fileObj) throw new Error('Selected file not found');
+                    return [fileObj];
+                } else {
+                    const fileObj = selectedFiles.find(f => f.name === selectedInputFile);
+                    if (!fileObj) throw new Error('Selected file not found');
+                    return [fileObj];
+                }
+            }
+            throw new Error('No file selected');
+        }
+
+        // --- Загрузка файла в MEMFS с прогрессом ---
+        async function loadFileWithProgress(fileInfo) {
+            const memPath = `/mnt/${fileInfo.name}`;
+            pyodide.FS.mkdirTree('/mnt');
+
+            if (loadedFiles.has(fileInfo.name)) {
+                printOutput(`📂 Используем кэшированный файл ${fileInfo.name}`);
+                return memPath;
+            }
+
+            const total = fileInfo.size;
+            const CHUNK_SIZE = 32 * 1024 * 1024; // 32 MB
+            let loaded = 0;
+            let lastLoggedPercent = -1;
+
+            progressContainer.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressText.textContent = `Загрузка ${fileInfo.name} (0%) в оперативную память...`;
+            printOutput(`📂 Начало загрузки ${fileInfo.name} (${(total/1024/1024).toFixed(2)} MB) в память (чанки по 32 МБ)...`);
+
+            const fd = pyodide.FS.open(memPath, 'w');
+            try {
+                for (let start = 0; start < total; start += CHUNK_SIZE) {
+                    const end = Math.min(start + CHUNK_SIZE, total);
+                    const chunk = fileInfo.slice(start, end);
+                    const arrayBuf = await chunk.arrayBuffer();
+                    const uint8 = new Uint8Array(arrayBuf);
+                    const nbytes = pyodide.FS.write(fd, uint8, 0, uint8.length, start);
+                    if (nbytes !== uint8.length) throw new Error('Write failed');
+                    loaded += nbytes;
+                    const percent = Math.round((loaded / total) * 100);
+                    progressBar.style.width = percent + '%';
+                    progressText.textContent = `Загрузка ${fileInfo.name} (${percent}%) в оперативную память...`;
+
+                    if (percent % 10 === 0 && percent !== lastLoggedPercent) {
+                        printOutput(`Загрузка ${fileInfo.name}: ${percent}% (${(loaded/1024/1024).toFixed(2)} MB из ${(total/1024/1024).toFixed(2)} MB)`);
+                        lastLoggedPercent = percent;
+                    }
+                }
+            } finally {
+                pyodide.FS.close(fd);
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                }, 1000);
+            }
+
+            loadedFiles.set(fileInfo.name, memPath);
+            printOutput(`✅ Файл ${fileInfo.name} загружен в память (${(total/1024/1024).toFixed(2)} MB)`);
+            return memPath;
+        }
+
+        async function preparePathForPython(fileInfo) {
+            if (currentMode === 'folder') {
+                return fileInfo.path;
+            } else {
+                return await loadFileWithProgress(fileInfo);
+            }
+        }
+
+        async function downloadResult(data, filename) {
+            const blob = new Blob([data], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            printOutput(`✅ Файл скачан: ${filename}`);
+        }
+
+        async function mountOutputDirectory() {
+            if (!nszReady) {
+                printOutput('❌ Сначала загрузите nsz (кнопка Load nsz)');
+                return;
+            }
+            if (!fsApiSupported) {
+                outputDirStatus.innerHTML = '❌ File System Access API not supported on this browser. На Android запись невозможна. Используйте режим файлов.';
+                return;
+            }
+            try {
+                try { pyodide.FS.unmount('/output'); } catch (e) {}
+                try { pyodide.FS.rmdir('/output'); } catch (e) {}
+
+                outputDirHandle = await window.showDirectoryPicker();
+                const perm = await outputDirHandle.requestPermission({ mode: 'readwrite' });
+                if (perm !== 'granted') throw new Error('Write permission not granted');
+
+                const entries = [];
+                for await (const entry of outputDirHandle.values()) {
+                    entries.push(entry.name);
+                }
+                if (entries.length > 0) {
+                    printOutput('⚠️ ВНИМАНИЕ: выбранная папка не пуста. Существующие файлы могут быть перезаписаны.');
+                }
+
+                pyodide.FS.mkdirTree('/output');
+                outputNativeFS = await pyodide.mountNativeFS('/output', outputDirHandle);
+
+                if (!outputNativeFS) throw new Error('mountNativeFS returned null.');
+                if (typeof outputNativeFS.syncfs !== 'function') throw new Error('Invalid filesystem object: missing syncfs method.');
+
+                outputDirStatus.innerHTML = `✅ Mounted: ${outputDirHandle.name}`;
+                printOutput(`✅ Output directory mounted at /output`);
+
+                await refreshOutputFileList();
+            } catch (e) {
+                const msg = stringifyError(e);
+                outputDirStatus.innerHTML = `❌ Failed: ${msg}`;
+                printOutput(`❌ Output directory mount error: ${msg}`);
+                outputDirHandle = null;
+                outputNativeFS = null;
+            }
+        }
+
+        async function refreshOutputFileList() {
+            if (!outputNativeFS) {
+                outputFileList.innerHTML = 'No folder mounted.';
+                return;
+            }
+            try {
+                const files = await pyodide.runPythonAsync(`
+import os
+try:
+    files = os.listdir('/output')
+    files.sort()
+    files
+except Exception as e:
+    print('Error listing output dir:', e)
+    []
+                `);
+                if (files && files.length) {
+                    outputFileList.innerHTML = files.map(f => `<i class="fas fa-file"></i> ${f}`).join('<br>');
+                } else {
+                    outputFileList.innerHTML = '<i class="far fa-folder-open"></i> Folder is empty.';
+                }
+            } catch (e) {
+                outputFileList.innerHTML = 'Error listing folder.';
+            }
+        }
+
+        selectOutputDirBtn.addEventListener('click', mountOutputDirectory);
+
+        // --- Управление ключами ---
+        async function writeKeys(keysContent) {
+            await pyodide.runPythonAsync(`
+import os
+keys_content = '''${keysContent.replace(/'/g, "\\'")}'''
+os.makedirs('/home/pyodide/.switch', exist_ok=True)
+with open('/home/pyodide/.switch/prod.keys', 'w') as f:
+    f.write(keys_content)
+with open('keys.txt', 'w') as f:
+    f.write(keys_content)
+print("Keys written to filesystem")
+            `);
+            keysStatus.textContent = '✅ Real keys loaded';
+            printOutput('✅ Real keys installed.');
+        }
+
+        async function fetchProdKeys() {
+            const url = 'https://raw.githubusercontent.com/yeoyck/switch-prodkeys/main/v16.0.0/prod.keys';
+            printOutput('Fetching keys...');
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const keysText = await response.text();
+                await writeKeys(keysText);
+                return true;
+            } catch (e) {
+                const msg = stringifyError(e);
+                printOutput(`❌ Failed to fetch keys: ${msg}`);
+                keysStatus.textContent = '❌ No keys available';
+                return false;
+            }
+        }
+
+        async function uploadKeys(file) {
+            const text = await file.text();
+            await writeKeys(text);
+        }
+
+        // --- Загрузка Pyodide и nsz ---
+        async function loadNSZ() {
+            printOutput('Loading Pyodide...');
+            statusEl.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Loading Pyodide...';
+            try {
+                pyodide = await loadPyodide();
+                printOutput('✅ Pyodide ready.');
+                statusEl.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Pyodide ready, loading packages...';
+                printOutput('Loading required packages (pycryptodome, lz4)...');
+                await pyodide.loadPackage(['micropip', 'pycryptodome', 'lz4']);
+                printOutput('✅ Base packages loaded.');
+                statusEl.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Installing nsz (this may take a minute)...';
+                printOutput('Installing nsz via micropip...');
+                const micropip = pyodide.pyimport('micropip');
+                await micropip.install('nsz');
+                printOutput('✅ nsz installed.');
+                await pyodide.runPythonAsync(`
+import sys
+from types import ModuleType
+class DummyCounter:
+    def __init__(self, *args, **kwargs):
+        self.count = 0
+        self.total = kwargs.get('total', 100)
+        self.desc = kwargs.get('desc', '')
+    def update(self, n=1): self.count += n
+    def refresh(self): pass
+    def close(self, clear=False): pass
+    def add_subcounter(self, color): return DummyCounter()
+    def __enter__(self): return self
+    def __exit__(self, *args): self.close()
+class DummyManager:
+    def __init__(self, *args, **kwargs): pass
+    def stop(self): pass
+    def counter(self, *args, **kwargs): return DummyCounter(*args, **kwargs)
+    def __enter__(self): return self
+    def __exit__(self, *args): self.stop()
+mock = ModuleType('enlighten')
+mock.Counter = DummyCounter
+mock.StatusBar = DummyCounter
+mock.SubCounter = DummyCounter
+mock.Manager = DummyManager
+mock.get_manager = lambda *a, **kw: DummyManager()
+sys.modules['enlighten'] = mock
+                `);
+                printOutput('✅ Enlighten mock installed.');
+                const keysOk = await fetchProdKeys();
+                if (!keysOk) throw new Error('Keys fetch failed - cannot proceed without keys');
+                await pyodide.runPythonAsync('import nsz');
+                printOutput('✅ nsz imported successfully.');
+                nszReady = true;
+                statusEl.innerHTML = '<i class="fas fa-check-circle" style="color:#2a5a9c;"></i> nsz ready';
+                keysControls.style.display = 'block';
+                inputSection.style.display = 'block';
+                outputDirSection.style.display = 'block';
+                updateButtons();
+                loadBtn.innerHTML = '<i class="fas fa-check-circle"></i> Loaded';
+            } catch (e) {
+                const msg = stringifyError(e);
+                printOutput('❌ Error during loading: ' + msg);
+                statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Installation failed';
+                loadBtn.disabled = false;
+                loadBtn.innerHTML = '<i class="fas fa-download"></i> Load nsz';
+                console.error(e);
+            }
+        }
+
+        // --- Переключение режимов ---
+        async function setMode(mode) {
+            currentMode = mode;
+            if (mode === 'folder') {
+                modeFolderBtn.classList.add('active');
+                modeFilesBtn.classList.remove('active');
+                folderModeArea.style.display = 'block';
+                filesModeArea.style.display = 'none';
+                outputDirSection.style.display = 'block';
+                updateFolderSelector();
+                if (currentFolderIndex !== -1) {
+                    const folder = inputFolders[currentFolderIndex];
+                    inputFilenames = folder.files.map(f => f.name);
+                    allFilesSelected = true;
+                    selectedInputFile = null;
+                } else {
+                    inputFilenames = [];
+                    allFilesSelected = false;
+                }
+                renderFileList();
+                updateButtons();
+            } else {
+                modeFolderBtn.classList.remove('active');
+                modeFilesBtn.classList.add('active');
+                folderModeArea.style.display = 'none';
+                filesModeArea.style.display = 'block';
+                outputDirSection.style.display = 'none';
+                inputFilenames = selectedFiles.map(f => f.name);
+                allFilesSelected = selectedFiles.length > 0;
+                selectedInputFile = null;
+                renderFileList();
+                updateButtons();
+            }
+        }
+
+        modeFolderBtn.addEventListener('click', () => setMode('folder'));
+        modeFilesBtn.addEventListener('click', () => setMode('files'));
+
+        // --- Анализ файла ---
+        async function analyzeFile() {
+            if (!nszReady) { printOutput('Please load nsz first.'); return; }
+            printOutput('🔍 Analyze button clicked');
+            let filesToProcess;
+            try {
+                filesToProcess = getFilesToProcess();
+            } catch (e) { printOutput('❌ ' + e.message); return; }
+
+            for (const file of filesToProcess) {
+                let path;
+                if (currentMode === 'folder') {
+                    path = file.path;
+                } else {
+                    path = await preparePathForPython(file);
+                }
+                pyodide.globals.set('filename', path);
+                try {
+                    printOutput('Running Python analysis...');
+                    const result = await pyodide.runPythonAsync(`
+import nsz
+from nsz import factory
+from pathlib import Path
+import io
+import sys
+file_path = Path(filename)
+container = factory(file_path)
+container.open(str(file_path), 'rb')
+old_stdout = sys.stdout
+sys.stdout = io.StringIO()
+try:
+    container.printInfo()
+    info = sys.stdout.getvalue()
+finally:
+    sys.stdout = old_stdout
+container.close()
+info
+                    `);
+                    printOutput('Python analysis completed');
+                    printOutput(result);
+                } catch (e) {
+                    const msg = stringifyError(e);
+                    printOutput(`❌ Error analyzing ${file.name}: ${msg}`);
+                }
+                printOutput('---');
+            }
+        }
+
+        // --- Проверка файла ---
+        async function verifyFile() {
+            if (!nszReady) { printOutput('Please load nsz first.'); return; }
+            printOutput('✅ Verify button clicked');
+            let filesToProcess;
+            try {
+                filesToProcess = getFilesToProcess();
+            } catch (e) { printOutput('❌ ' + e.message); return; }
+
+            for (const file of filesToProcess) {
+                let path;
+                if (currentMode === 'folder') {
+                    path = file.path;
+                } else {
+                    path = await preparePathForPython(file);
+                }
+                pyodide.globals.set('verify_path', path);
+                try {
+                    printOutput('Running Python verification...');
+                    await pyodide.runPythonAsync(`
+import nsz
+from pathlib import Path
+nsz.verify(Path(verify_path), fixPadding=False, raiseVerificationException=True, raisePfs0Exception=False, originalFilePath=None, statusReportInfo=None, pleaseNoPrint=None)
+print("Verification passed")
+                    `);
+                    printOutput('Python verification completed');
+                    printOutput(`✅ ${file.name} verified OK`);
+                } catch (e) {
+                    const msg = stringifyError(e);
+                    printOutput(`❌ Verification failed for ${file.name}: ${msg}`);
+                }
+                printOutput('---');
+            }
+        }
+
+        // --- Распаковка NSZ в NSP ---
+        async function decompressFile() {
+            if (!nszReady) { printOutput('Please load nsz first.'); return; }
+            printOutput('🔄 Decompress button clicked');
+            
+            let filesToProcess;
+            try {
+                filesToProcess = getFilesToProcess();
+            } catch (e) { printOutput('❌ ' + e.message); return; }
+
+            const nszFiles = filesToProcess.filter(f => f.name.toLowerCase().endsWith('.nsz'));
+            if (nszFiles.length === 0) { printOutput('No NSZ files selected.'); return; }
+
+            for (const file of nszFiles) {
+                let inputPath;
+                if (currentMode === 'folder') {
+                    inputPath = file.path;
+                } else {
+                    inputPath = await preparePathForPython(file);
+                }
+
+                let outputDir;
+                let useDownload = false;
+                let syncTarget = null;
+
+                if (currentMode === 'folder') {
+                    if (outputNativeFS) {
+                        outputDir = '/output';
+                        syncTarget = outputNativeFS;
+                    } else {
+                        outputDir = '/input/output';
+                        try { pyodide.FS.mkdir(outputDir); } catch (e) {}
+                        if (currentFolderIndex !== -1) {
+                            syncTarget = inputFolders[currentFolderIndex].nativeFS;
+                        }
+                    }
+                } else {
+                    outputDir = '/tmp';
+                    useDownload = true;
+                }
+
+                const outputFilename = file.name.replace(/\.nsz$/i, '.nsp');
+                const outputPath = outputDir + '/' + outputFilename;
+                pyodide.globals.set('input_path', inputPath);
+                pyodide.globals.set('output_path', outputPath);
+
+                try {
+                    printOutput('Running Python decompression...');
+                    await pyodide.runPythonAsync(`
+import nsz
+from pathlib import Path
+input_path = Path(input_path)
+output_path = Path(output_path)
+nsz.decompress(input_path, output_path.parent, fixPadding=False, statusReportInfo=None)
+print("Decompression complete")
+                    `);
+                    pyodide.FS.stat(outputPath);
+
+                    if (useDownload) {
+                        const resultData = pyodide.FS.readFile(outputPath);
+                        await downloadResult(resultData, outputFilename);
+                        try { pyodide.FS.unlink(outputPath); } catch (e) {}
+                    } else {
+                        await syncTarget.syncfs();
+                        printOutput(`✅ File saved: ${outputPath}`);
+                    }
+                } catch (e) {
+                    const msg = stringifyError(e);
+                    printOutput(`❌ Decompression error for ${file.name}: ${msg}`);
+                }
+                printOutput('---');
+            }
+            if (outputNativeFS) await refreshOutputFileList();
+        }
+
+        // --- Сжатие NSP в NSZ ---
+        async function compressFile() {
+            if (!nszReady) { printOutput('Please load nsz first.'); return; }
+            printOutput('📦 Compress button clicked');
+            
+            let filesToProcess;
+            try {
+                filesToProcess = getFilesToProcess();
+            } catch (e) { printOutput('❌ ' + e.message); return; }
+
+            const nspFiles = filesToProcess.filter(f => f.name.toLowerCase().endsWith('.nsp'));
+            if (nspFiles.length === 0) { printOutput('No NSP files selected.'); return; }
+
+            validateInputs();
+            const level = parseInt(compressLevelInput.value, 10);
+            const threads = parseInt(threadsInput.value, 10);
+
+            const useLong = flagLong.checked;
+            const useBlock = flagBlock.checked;
+            const useSolid = flagSolid.checked;
+            const fixPadding = flagFixPadding.checked;
+            const keep = flagKeep.checked;
+            const quickVerify = flagQuickVerify.checked;
+            const overwrite = flagOverwrite.checked;
+            const rmSource = flagRmSource.checked;
+
+            for (const file of nspFiles) {
+                let inputPath;
+                if (currentMode === 'folder') {
+                    inputPath = file.path;
+                } else {
+                    inputPath = await preparePathForPython(file);
+                }
+
+                let outputDir;
+                let useDownload = false;
+                let syncTarget = null;
+
+                if (currentMode === 'folder') {
+                    if (outputNativeFS) {
+                        outputDir = '/output';
+                        syncTarget = outputNativeFS;
+                    } else {
+                        outputDir = '/input/output';
+                        try { pyodide.FS.mkdir(outputDir); } catch (e) {}
+                        if (currentFolderIndex !== -1) {
+                            syncTarget = inputFolders[currentFolderIndex].nativeFS;
+                        }
+                    }
+                } else {
+                    outputDir = '/tmp';
+                    useDownload = true;
+                }
+
+                const outputFilename = file.name.replace(/\.nsp$/i, '.nsz');
+                const outputPath = outputDir + '/' + outputFilename;
+
+                pyodide.globals.set('input_path', inputPath);
+                pyodide.globals.set('output_dir', outputDir);
+                pyodide.globals.set('compress_level', level);
+                pyodide.globals.set('threads', threads);
+                pyodide.globals.set('use_long', useLong);
+                pyodide.globals.set('fix_padding', fixPadding);
+                pyodide.globals.set('keep', keep);
+
+                try {
+                    printOutput('Running Python compression...');
+                    if (useBlock) {
+                        await pyodide.runPythonAsync(`
+import nsz
+from nsz.BlockCompressor import blockCompress
+from pathlib import Path
+input_path = Path(input_path)
+output_dir = Path(output_dir)
+level = compress_level
+threads = threads
+use_long = use_long
+fix_padding = fix_padding
+keep = keep
+out_file = blockCompress(
+    input_path,
+    level,
+    keep,
+    fix_padding,
+    use_long,
+    20,
+    output_dir,
+    threads
+)
+print(f"Compression complete: {out_file}")
+                        `);
+                    } else {
+                        await pyodide.runPythonAsync(`
+import nsz
+from nsz.SolidCompressor import solidCompress
+from pathlib import Path
+input_path = Path(input_path)
+output_dir = Path(output_dir)
+level = compress_level
+threads = threads
+use_long = use_long
+fix_padding = fix_padding
+keep = keep
+status_report = [[0, 0, 0, '']]
+out_file = solidCompress(
+    input_path,
+    level,
+    keep,
+    fix_padding,
+    use_long,
+    output_dir,
+    threads,
+    status_report,
+    0,
+    None
+)
+print(f"Compression complete: {out_file}")
+                        `);
+                    }
+                    pyodide.FS.stat(outputPath);
+
+                    if (useDownload) {
+                        const resultData = pyodide.FS.readFile(outputPath);
+                        await downloadResult(resultData, outputFilename);
+                        try { pyodide.FS.unlink(outputPath); } catch (e) {}
+                    } else {
+                        await syncTarget.syncfs();
+                        printOutput(`✅ File saved: ${outputPath}`);
+                    }
+                } catch (e) {
+                    const msg = stringifyError(e);
+                    printOutput(`❌ Compression error for ${file.name}: ${msg}`);
+                }
+                printOutput('---');
+            }
+            if (outputNativeFS) await refreshOutputFileList();
+        }
+
+        // --- Обработчики событий ---
+        loadBtn.addEventListener('click', async () => {
+            loadBtn.disabled = true;
+            loadBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Loading...';
+            await loadNSZ();
+        });
+
+        fetchKeysBtn.addEventListener('click', fetchProdKeys);
+        uploadKeysBtn.addEventListener('click', () => keysFileInput.click());
+        keysFileInput.addEventListener('change', e => { if (e.target.files.length) uploadKeys(e.target.files[0]); });
+
+        analyzeBtn.addEventListener('click', analyzeFile);
+        verifyBtn.addEventListener('click', verifyFile);
+        decompressBtn.addEventListener('click', decompressFile);
+        compressBtn.addEventListener('click', compressFile);
+    })();
+</script>
+</body>
+</html>
