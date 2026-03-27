@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>nsz in Pyodide – Process All, Verify, Clean Analysis</title>
+    <title>nsz in Pyodide – mountNativeFS Input & Output</title>
     <style>
         body { font-family: sans-serif; margin: 2em; }
         textarea { width: 100%; height: 300px; font-family: monospace; }
@@ -15,20 +14,15 @@
         .file-list { max-height: 150px; overflow-y: auto; background: #f5f5f5; padding: 0.5em; font-size: 0.9em; }
         .file-list li { cursor: pointer; color: blue; text-decoration: underline; }
         .file-list li:hover { background: #e0e0e0; }
-        .checkbox-label { margin-left: 1em; }
-        .note { background-color: #e7f3ff; border: 1px solid #b8daff; color: #004085; padding: 0.5em; border-radius: 4px; margin-top: 1em; }
     </style>
 </head>
 <body>
-    <h1>nsz – Process All Files, Verify, Clean Analysis</h1>
-    <p>Load <code>nsz</code>, pick input/output folders. Click a file to select it, or check "Process all files" to ignore selection. Analyze shows only <code>printInfo()</code>. Verify uses native <code>nsz.verify</code>.</p>
+    <h1>nsz – mountNativeFS Input & Output</h1>
+    <p>Load <code>nsz</code>, then pick an input folder (containing NSZ/NSP files) and an output folder. Click a file to analyze or convert. Uses zero‑copy native file system access.</p>
 
     <div>
         <button id="loadBtn">Load nsz</button>
         <span id="status">Not loaded</span>
-        <div class="note" style="margin-top:0.5em;">
-            📦 Note: Initial download includes Pyodide (~10 MB) plus nsz and dependencies (~5‑10 MB). Please be patient.
-        </div>
     </div>
 
     <div id="keysControls" style="display:none;" class="keys-section">
@@ -46,14 +40,11 @@
         <button id="selectInputDirBtn">📁 Select Input Folder</button>
         <span id="inputDirStatus">No folder selected</span>
         <div id="inputFileList" class="file-list">Folder contents will appear here (click to select)...</div>
-        <label class="checkbox-label">
-            <input type="checkbox" id="processAllCheckbox"> Process all files (ignores selection)
-        </label>
     </div>
 
     <div id="outputDirSection" style="display:none;" class="dir-section">
         <h3>📂 Output Directory</h3>
-        <p>Choose a folder where converted/verified files will be saved. Changes are synced with <code>syncfs()</code>.</p>
+        <p>Choose a folder where converted NSP files will be saved. Changes are synced with <code>syncfs()</code>.</p>
         <button id="selectOutputDirBtn">📁 Select Output Folder</button>
         <span id="outputDirStatus">No folder selected</span>
         <div id="outputFileList" class="file-list">Folder contents will appear here...</div>
@@ -64,9 +55,8 @@
     <div>
         <p><strong>Selected input file:</strong> <span id="selectedFile">None</span></p>
         <div class="button-group">
-            <button id="analyzeBtn" disabled>🔍 Analyze</button>
-            <button id="verifyBtn" disabled>✅ Verify</button>
-            <button id="convertBtn" disabled>🔄 Convert NSZ → NSP</button>
+            <button id="analyzeBtn" disabled>🔍 Native Analyze</button>
+            <button id="convertBtn" disabled>🔄 Convert NSZ to NSP</button>
         </div>
     </div>
 
@@ -102,7 +92,6 @@
         const selectInputDirBtn = document.getElementById('selectInputDirBtn');
         const inputDirStatus = document.getElementById('inputDirStatus');
         const inputFileList = document.getElementById('inputFileList');
-        const processAllCheckbox = document.getElementById('processAllCheckbox');
 
         const outputDirSection = document.getElementById('outputDirSection');
         const selectOutputDirBtn = document.getElementById('selectOutputDirBtn');
@@ -111,7 +100,6 @@
 
         const selectedFileSpan = document.getElementById('selectedFile');
         const analyzeBtn = document.getElementById('analyzeBtn');
-        const verifyBtn = document.getElementById('verifyBtn');
         const convertBtn = document.getElementById('convertBtn');
 
         // Helper: safely stringify errors
@@ -132,29 +120,6 @@
 
         function printOutput(text) {
             outputEl.value += text + '\n';
-        }
-
-        // Update button enabled state based on checkbox and available files
-        function updateButtons() {
-            if (!nszReady) {
-                analyzeBtn.disabled = true;
-                verifyBtn.disabled = true;
-                convertBtn.disabled = true;
-                return;
-            }
-            if (processAllCheckbox.checked) {
-                // Enable if there are any files in input folder
-                const enabled = inputFiles.length > 0;
-                analyzeBtn.disabled = !enabled;
-                verifyBtn.disabled = !enabled;
-                convertBtn.disabled = !enabled;
-            } else {
-                // Enable only if a file is selected
-                const enabled = selectedInputFile !== null;
-                analyzeBtn.disabled = !enabled;
-                verifyBtn.disabled = !enabled;
-                convertBtn.disabled = !enabled;
-            }
         }
 
         // ---------- Mount input directory using mountNativeFS ----------
@@ -178,7 +143,6 @@
                 printOutput(`❌ Input directory mount error: ${msg}`);
                 inputDirHandle = null;
                 inputNativeFS = null;
-                updateButtons();
             }
         }
 
@@ -186,33 +150,20 @@
         async function refreshInputFileList() {
             if (!inputNativeFS) {
                 inputFileList.innerHTML = 'No folder mounted.';
-                updateButtons();
                 return;
             }
             try {
-                const resultJson = await pyodide.runPythonAsync(`
+                const files = await pyodide.runPythonAsync(`
 import os
-import json
-
-files = []
-
 try:
-    all_items = os.listdir('/input')
-    valid_ext = ('.nsp', '.nsz')
-    for item in all_items:
-        full_path = os.path.join('/input', item)
-        if os.path.isfile(full_path) and item.lower().endswith(valid_ext):
-            files.append(item)
+    files = [f for f in os.listdir('/input') if f.lower().endswith(('.nsp', '.nsz'))]
+    files.sort()
+    files
 except Exception as e:
-    import traceback
-    pass  # we'll handle empty list
-
-json.dumps({"files": files})
+    print('Error listing input dir:', e)
+    []
                 `);
-
-                const data = JSON.parse(resultJson);
-                inputFiles = data.files || [];
-
+                inputFiles = files || [];
                 if (inputFiles.length) {
                     const ul = document.createElement('ul');
                     ul.style.margin = '0';
@@ -229,11 +180,8 @@ json.dumps({"files": files})
                 } else {
                     inputFileList.innerHTML = 'No .nsp or .nsz files found.';
                 }
-                updateButtons();
             } catch (e) {
                 inputFileList.innerHTML = 'Error listing folder.';
-                printOutput('❌ List error: ' + stringifyError(e));
-                updateButtons();
             }
         }
 
@@ -241,19 +189,9 @@ json.dumps({"files": files})
         function selectFile(filename) {
             selectedInputFile = filename;
             selectedFileSpan.textContent = filename;
-            updateButtons();
+            analyzeBtn.disabled = false;
+            convertBtn.disabled = false;
             printOutput(`📁 Selected: ${filename}`);
-        }
-
-        // ---------- Get list of files to process based on checkbox ----------
-        function getFilesToProcess() {
-            if (processAllCheckbox.checked) {
-                if (inputFiles.length === 0) throw new Error('No files in input directory');
-                return inputFiles;
-            } else {
-                if (!selectedInputFile) throw new Error('No file selected');
-                return [selectedInputFile];
-            }
         }
 
         // ---------- Mount output directory using mountNativeFS ----------
@@ -415,7 +353,6 @@ sys.modules['enlighten'] = mock
                 keysControls.style.display = 'block';
                 inputDirSection.style.display = 'block';
                 outputDirSection.style.display = 'block';
-                updateButtons();
             } catch (e) {
                 const msg = stringifyError(e);
                 printOutput('❌ Error: ' + msg);
@@ -423,32 +360,32 @@ sys.modules['enlighten'] = mock
                 loadBtn.disabled = false;
                 loadBtn.textContent = 'Load nsz';
                 console.error(e);
-                updateButtons();
             }
         }
 
-        // ---------- NATIVE ANALYSIS (only printInfo) ----------
+        // ---------- Get full path of selected input file ----------
+        function getInputFilePath() {
+            if (!selectedInputFile) throw new Error('No file selected');
+            return '/input/' + selectedInputFile;
+        }
+
+        // ---------- NATIVE ANALYSIS (using printInfo) ----------
         async function analyzeFile() {
             if (!nszReady) {
                 printOutput('Please load nsz first.');
                 return;
             }
-
-            let filesToProcess;
-            try {
-                filesToProcess = getFilesToProcess();
-            } catch (e) {
-                printOutput('❌ ' + e.message);
+            if (!selectedInputFile) {
+                printOutput('Please select an input file.');
                 return;
             }
 
-            for (const filename of filesToProcess) {
-                const filePath = '/input/' + filename;
-                printOutput(`🔍 Analyzing: ${filename}`);
-                pyodide.globals.set('filename', filePath);
+            const filePath = getInputFilePath();
+            printOutput(`🔍 Analyzing: ${selectedInputFile}`);
+            pyodide.globals.set('filename', filePath);
 
-                try {
-                    const result = await pyodide.runPythonAsync(`
+            try {
+                const result = await pyodide.runPythonAsync(`
 import nsz
 from nsz import factory
 from pathlib import Path
@@ -468,61 +405,24 @@ try:
 finally:
     sys.stdout = old_stdout
 
+# Also list first 20 files with sizes
+files = getattr(container, 'files', [])
+file_list = []
+for f in files[:20]:
+    f_name = getattr(f, 'name', '?')
+    f_size = getattr(f, 'size', 0)
+    file_list.append(f"  {f_name} ({f_size} bytes)")
+if len(files) > 20:
+    file_list.append(f"  ... and {len(files)-20} more files")
+
 container.close()
-info
-                    `);
-                    printOutput(result);
-                } catch (e) {
-                    const msg = stringifyError(e);
-                    printOutput(`❌ Error analyzing ${filename}: ${msg}`);
-                }
-                printOutput('---');
-            }
-        }
 
-        // ---------- VERIFY (native nsz.verify) ----------
-        async function verifyFile() {
-            if (!nszReady) {
-                printOutput('Please load nsz first.');
-                return;
-            }
-
-            let filesToProcess;
-            try {
-                filesToProcess = getFilesToProcess();
+info + "\\n\\n📄 FILE LIST (first 20):\\n" + "\\n".join(file_list)
+                `);
+                printOutput(result);
             } catch (e) {
-                printOutput('❌ ' + e.message);
-                return;
-            }
-
-            for (const filename of filesToProcess) {
-                const filePath = '/input/' + filename;
-                printOutput(`✅ Verifying: ${filename}`);
-                pyodide.globals.set('verify_path', filePath);
-
-                try {
-                    await pyodide.runPythonAsync(`
-import nsz
-from pathlib import Path
-
-# nsz.verify expects: filePath, fixPadding, raiseVerificationException, raisePfs0Exception, originalFilePath=None, statusReportInfo=None, pleaseNoPrint=None
-nsz.verify(
-    Path(verify_path),
-    fixPadding=False,
-    raiseVerificationException=True,
-    raisePfs0Exception=False,
-    originalFilePath=None,
-    statusReportInfo=None,
-    pleaseNoPrint=None
-)
-print("Verification passed")
-                    `);
-                    printOutput(`✅ ${filename} verified OK`);
-                } catch (e) {
-                    const msg = stringifyError(e);
-                    printOutput(`❌ Verification failed for ${filename}: ${msg}`);
-                }
-                printOutput('---');
+                const msg = stringifyError(e);
+                printOutput('❌ Python error: ' + msg);
             }
         }
 
@@ -532,41 +432,35 @@ print("Verification passed")
                 printOutput('Please load nsz first.');
                 return;
             }
-
-            let filesToProcess;
-            try {
-                filesToProcess = getFilesToProcess();
-            } catch (e) {
-                printOutput('❌ ' + e.message);
+            if (!selectedInputFile) {
+                printOutput('Please select an input file.');
+                return;
+            }
+            if (!selectedInputFile.toLowerCase().endsWith('.nsz')) {
+                printOutput('Selected file is not an NSZ. Conversion skipped.');
                 return;
             }
 
-            for (const filename of filesToProcess) {
-                if (!filename.toLowerCase().endsWith('.nsz')) {
-                    printOutput(`Skipping ${filename} (not NSZ)`);
-                    continue;
-                }
+            const inputPath = getInputFilePath();
+            printOutput(`🔄 Converting: ${selectedInputFile} to NSP...`);
 
-                const inputPath = '/input/' + filename;
-                printOutput(`🔄 Converting: ${filename} to NSP...`);
+            let outputDir = '/tmp/output';
+            let useDownload = false;
+            if (outputNativeFS) {
+                outputDir = '/output';
+                printOutput('📁 Using mounted output directory.');
+            } else {
+                useDownload = true;
+                printOutput('📁 No output folder mounted, will download file.');
+                try { pyodide.FS.mkdir(outputDir); } catch (e) {}
+            }
 
-                let outputDir = '/tmp/output';
-                let useDownload = false;
-                if (outputNativeFS) {
-                    outputDir = '/output';
-                    printOutput('📁 Using mounted output directory.');
-                } else {
-                    useDownload = true;
-                    printOutput('📁 No output folder mounted, will download file.');
-                    try { pyodide.FS.mkdir(outputDir); } catch (e) {}
-                }
+            const outputFilename = outputDir + '/' + selectedInputFile.replace(/\.nsz$/i, '.nsp');
+            pyodide.globals.set('input_path', inputPath);
+            pyodide.globals.set('output_path', outputFilename);
 
-                const outputFilename = outputDir + '/' + filename.replace(/\.nsz$/i, '.nsp');
-                pyodide.globals.set('input_path', inputPath);
-                pyodide.globals.set('output_path', outputFilename);
-
-                try {
-                    await pyodide.runPythonAsync(`
+            try {
+                await pyodide.runPythonAsync(`
 import nsz
 from pathlib import Path
 
@@ -580,33 +474,31 @@ nsz.decompress(
     statusReportInfo=None
 )
 print("Decompression complete")
-                    `);
+                `);
 
-                    pyodide.FS.stat(outputFilename); // verify file exists
+                pyodide.FS.stat(outputFilename); // verify file exists
 
-                    if (useDownload) {
-                        const fileData = pyodide.FS.readFile(outputFilename);
-                        const blob = new Blob([fileData], { type: 'application/octet-stream' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = filename.replace(/\.nsz$/i, '.nsp');
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                        printOutput('✅ Download started.');
-                    } else {
-                        await outputNativeFS.syncfs();
-                        printOutput(`✅ File saved to mounted folder: ${outputFilename}`);
-                        await refreshOutputFileList();
-                    }
-                } catch (e) {
-                    const msg = stringifyError(e);
-                    printOutput(`❌ Conversion error for ${filename}: ${msg}`);
-                    console.error(e);
+                if (useDownload) {
+                    const fileData = pyodide.FS.readFile(outputFilename);
+                    const blob = new Blob([fileData], { type: 'application/octet-stream' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = selectedInputFile.replace(/\.nsz$/i, '.nsp');
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    printOutput('✅ Download started.');
+                } else {
+                    await outputNativeFS.syncfs();
+                    printOutput(`✅ File saved to mounted folder: ${outputFilename}`);
+                    await refreshOutputFileList();
                 }
-                printOutput('---');
+            } catch (e) {
+                const msg = stringifyError(e);
+                printOutput('❌ Conversion error: ' + msg);
+                console.error(e);
             }
         }
 
@@ -626,11 +518,7 @@ print("Decompression complete")
         selectInputDirBtn.addEventListener('click', mountInputDirectory);
         selectOutputDirBtn.addEventListener('click', mountOutputDirectory);
 
-        processAllCheckbox.addEventListener('change', updateButtons);
-
         analyzeBtn.addEventListener('click', analyzeFile);
-        verifyBtn.addEventListener('click', verifyFile);
         convertBtn.addEventListener('click', convertFile);
     </script>
 </body>
-</html>

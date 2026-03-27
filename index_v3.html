@@ -3,7 +3,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>nsz in Pyodide – Process All, Verify, Clean Analysis</title>
+    <title>nsz in Pyodide – All Native Functions</title>
     <style>
         body { font-family: sans-serif; margin: 2em; }
         textarea { width: 100%; height: 300px; font-family: monospace; }
@@ -17,17 +17,19 @@
         .file-list li:hover { background: #e0e0e0; }
         .checkbox-label { margin-left: 1em; }
         .note { background-color: #e7f3ff; border: 1px solid #b8daff; color: #004085; padding: 0.5em; border-radius: 4px; margin-top: 1em; }
+        .compress-options { margin-top: 0.5em; }
+        .compress-options label { margin-right: 1em; }
     </style>
 </head>
 <body>
-    <h1>nsz – Process All Files, Verify, Clean Analysis</h1>
-    <p>Load <code>nsz</code>, pick input/output folders. Click a file to select it, or check "Process all files" to ignore selection. Analyze shows only <code>printInfo()</code>. Verify uses native <code>nsz.verify</code>.</p>
+    <h1>nsz – All Native Functions (Analyze, Verify, Decompress, Compress)</h1>
+    <p>Load <code>nsz</code>, pick input/output folders. Click a file to select it, or check "Process all files".</p>
 
     <div>
         <button id="loadBtn">Load nsz</button>
         <span id="status">Not loaded</span>
         <div class="note" style="margin-top:0.5em;">
-            📦 Note: Initial download includes Pyodide (~10 MB) plus nsz and dependencies (~5‑10 MB). Please be patient.
+            📦 Initial download: Pyodide (~10 MB) + nsz & dependencies (~5‑10 MB). Please be patient.
         </div>
     </div>
 
@@ -53,7 +55,7 @@
 
     <div id="outputDirSection" style="display:none;" class="dir-section">
         <h3>📂 Output Directory</h3>
-        <p>Choose a folder where converted/verified files will be saved. Changes are synced with <code>syncfs()</code>.</p>
+        <p>Choose a folder where converted files will be saved. Changes are synced with <code>syncfs()</code>.</p>
         <button id="selectOutputDirBtn">📁 Select Output Folder</button>
         <span id="outputDirStatus">No folder selected</span>
         <div id="outputFileList" class="file-list">Folder contents will appear here...</div>
@@ -63,10 +65,14 @@
 
     <div>
         <p><strong>Selected input file:</strong> <span id="selectedFile">None</span></p>
+        <div class="compress-options">
+            <label>Compression level (1‑22): <input type="number" id="compressLevel" min="1" max="22" value="18" style="width:60px;"></label>
+        </div>
         <div class="button-group">
             <button id="analyzeBtn" disabled>🔍 Analyze</button>
             <button id="verifyBtn" disabled>✅ Verify</button>
-            <button id="convertBtn" disabled>🔄 Convert NSZ → NSP</button>
+            <button id="decompressBtn" disabled>🔄 Decompress NSZ → NSP</button>
+            <button id="compressBtn" disabled>📦 Compress NSP → NSZ</button>
         </div>
     </div>
 
@@ -112,7 +118,9 @@
         const selectedFileSpan = document.getElementById('selectedFile');
         const analyzeBtn = document.getElementById('analyzeBtn');
         const verifyBtn = document.getElementById('verifyBtn');
-        const convertBtn = document.getElementById('convertBtn');
+        const decompressBtn = document.getElementById('decompressBtn');
+        const compressBtn = document.getElementById('compressBtn');
+        const compressLevelInput = document.getElementById('compressLevel');
 
         // Helper: safely stringify errors
         function stringifyError(e) {
@@ -139,21 +147,26 @@
             if (!nszReady) {
                 analyzeBtn.disabled = true;
                 verifyBtn.disabled = true;
-                convertBtn.disabled = true;
+                decompressBtn.disabled = true;
+                compressBtn.disabled = true;
                 return;
             }
             if (processAllCheckbox.checked) {
-                // Enable if there are any files in input folder
                 const enabled = inputFiles.length > 0;
                 analyzeBtn.disabled = !enabled;
                 verifyBtn.disabled = !enabled;
-                convertBtn.disabled = !enabled;
+                // Decompress: need at least one NSZ file
+                const hasNSZ = inputFiles.some(f => f.toLowerCase().endsWith('.nsz'));
+                decompressBtn.disabled = !hasNSZ;
+                // Compress: need at least one NSP file
+                const hasNSP = inputFiles.some(f => f.toLowerCase().endsWith('.nsp'));
+                compressBtn.disabled = !hasNSP;
             } else {
-                // Enable only if a file is selected
                 const enabled = selectedInputFile !== null;
                 analyzeBtn.disabled = !enabled;
                 verifyBtn.disabled = !enabled;
-                convertBtn.disabled = !enabled;
+                decompressBtn.disabled = !(selectedInputFile && selectedInputFile.toLowerCase().endsWith('.nsz'));
+                compressBtn.disabled = !(selectedInputFile && selectedInputFile.toLowerCase().endsWith('.nsp'));
             }
         }
 
@@ -205,7 +218,7 @@ try:
             files.append(item)
 except Exception as e:
     import traceback
-    pass  # we'll handle empty list
+    pass
 
 json.dumps({"files": files})
                 `);
@@ -505,7 +518,6 @@ info
 import nsz
 from pathlib import Path
 
-# nsz.verify expects: filePath, fixPadding, raiseVerificationException, raisePfs0Exception, originalFilePath=None, statusReportInfo=None, pleaseNoPrint=None
 nsz.verify(
     Path(verify_path),
     fixPadding=False,
@@ -526,8 +538,8 @@ print("Verification passed")
             }
         }
 
-        // ---------- CONVERT NSZ TO NSP ----------
-        async function convertFile() {
+        // ---------- DECOMPRESS NSZ TO NSP ----------
+        async function decompressFile() {
             if (!nszReady) {
                 printOutput('Please load nsz first.');
                 return;
@@ -541,27 +553,23 @@ print("Verification passed")
                 return;
             }
 
-            for (const filename of filesToProcess) {
-                if (!filename.toLowerCase().endsWith('.nsz')) {
-                    printOutput(`Skipping ${filename} (not NSZ)`);
-                    continue;
-                }
+            // Filter only NSZ files
+            const nszFiles = filesToProcess.filter(f => f.toLowerCase().endsWith('.nsz'));
+            if (nszFiles.length === 0) {
+                printOutput('No NSZ files selected.');
+                return;
+            }
 
+            if (!outputNativeFS) {
+                printOutput('❌ Output directory must be mounted for decompression.');
+                return;
+            }
+
+            for (const filename of nszFiles) {
                 const inputPath = '/input/' + filename;
-                printOutput(`🔄 Converting: ${filename} to NSP...`);
+                printOutput(`🔄 Decompressing: ${filename} to NSP...`);
 
-                let outputDir = '/tmp/output';
-                let useDownload = false;
-                if (outputNativeFS) {
-                    outputDir = '/output';
-                    printOutput('📁 Using mounted output directory.');
-                } else {
-                    useDownload = true;
-                    printOutput('📁 No output folder mounted, will download file.');
-                    try { pyodide.FS.mkdir(outputDir); } catch (e) {}
-                }
-
-                const outputFilename = outputDir + '/' + filename.replace(/\.nsz$/i, '.nsp');
+                const outputFilename = '/output/' + filename.replace(/\.nsz$/i, '.nsp');
                 pyodide.globals.set('input_path', inputPath);
                 pyodide.globals.set('output_path', outputFilename);
 
@@ -582,32 +590,97 @@ nsz.decompress(
 print("Decompression complete")
                     `);
 
-                    pyodide.FS.stat(outputFilename); // verify file exists
-
-                    if (useDownload) {
-                        const fileData = pyodide.FS.readFile(outputFilename);
-                        const blob = new Blob([fileData], { type: 'application/octet-stream' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = filename.replace(/\.nsz$/i, '.nsp');
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                        printOutput('✅ Download started.');
-                    } else {
-                        await outputNativeFS.syncfs();
-                        printOutput(`✅ File saved to mounted folder: ${outputFilename}`);
-                        await refreshOutputFileList();
-                    }
+                    pyodide.FS.stat(outputFilename);
+                    await outputNativeFS.syncfs();
+                    printOutput(`✅ File saved: ${outputFilename}`);
                 } catch (e) {
                     const msg = stringifyError(e);
-                    printOutput(`❌ Conversion error for ${filename}: ${msg}`);
-                    console.error(e);
+                    printOutput(`❌ Decompression error for ${filename}: ${msg}`);
                 }
                 printOutput('---');
             }
+            await refreshOutputFileList();
+        }
+
+        // ---------- COMPRESS NSP TO NSZ (using solidCompress) ----------
+        async function compressFile() {
+            if (!nszReady) {
+                printOutput('Please load nsz first.');
+                return;
+            }
+
+            let filesToProcess;
+            try {
+                filesToProcess = getFilesToProcess();
+            } catch (e) {
+                printOutput('❌ ' + e.message);
+                return;
+            }
+
+            // Filter only NSP files
+            const nspFiles = filesToProcess.filter(f => f.toLowerCase().endsWith('.nsp'));
+            if (nspFiles.length === 0) {
+                printOutput('No NSP files selected.');
+                return;
+            }
+
+            if (!outputNativeFS) {
+                printOutput('❌ Output directory must be mounted for compression.');
+                return;
+            }
+
+            const level = parseInt(compressLevelInput.value, 10);
+            if (isNaN(level) || level < 1 || level > 22) {
+                printOutput('❌ Compression level must be between 1 and 22.');
+                return;
+            }
+
+            for (const filename of nspFiles) {
+                const inputPath = '/input/' + filename;
+                printOutput(`📦 Compressing: ${filename} to NSZ (level ${level})...`);
+
+                const outputFilename = '/output/' + filename.replace(/\.nsp$/i, '.nsz');
+                pyodide.globals.set('input_path', inputPath);
+                pyodide.globals.set('output_path', outputFilename);
+                pyodide.globals.set('compress_level', level);
+
+                try {
+                    // Use solidCompress directly (most common for NSP)
+                    await pyodide.runPythonAsync(`
+import nsz
+from nsz.SolidCompressor import solidCompress
+from pathlib import Path
+
+input_path = Path(input_path)
+output_path = Path(output_path)
+level = compress_level
+
+# solidCompress expects: filePath, compressionLevel, keep, fixPadding, useLongDistanceMode, outputDir, threadsToUse, statusReport, id, pleaseNoPrint
+# We'll use defaults: keep=False, fixPadding=False, long=False, threads=1, statusReport=None, id=0, pleaseNoPrint=None
+out_file = solidCompress(
+    input_path,
+    compressionLevel=level,
+    keep=False,
+    fixPadding=False,
+    useLongDistanceMode=False,
+    outputDir=output_path.parent,
+    threadsToUse=1,
+    statusReport=None,
+    id=0,
+    pleaseNoPrint=None
+)
+print(f"Compression complete: {out_file}")
+                    `);
+
+                    await outputNativeFS.syncfs();
+                    printOutput(`✅ File saved: ${outputFilename}`);
+                } catch (e) {
+                    const msg = stringifyError(e);
+                    printOutput(`❌ Compression error for ${filename}: ${msg}`);
+                }
+                printOutput('---');
+            }
+            await refreshOutputFileList();
         }
 
         // ---------- EVENT LISTENERS ----------
@@ -630,7 +703,8 @@ print("Decompression complete")
 
         analyzeBtn.addEventListener('click', analyzeFile);
         verifyBtn.addEventListener('click', verifyFile);
-        convertBtn.addEventListener('click', convertFile);
+        decompressBtn.addEventListener('click', decompressFile);
+        compressBtn.addEventListener('click', compressFile);
     </script>
 </body>
 </html>
